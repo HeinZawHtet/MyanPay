@@ -30,10 +30,7 @@ class Myanpay extends Gateway {
 
 	public function __construct()
 	{
-		// $this->apiUsername 	= Config::get('myanpay::api_username');
-		// $this->apiPassword 	= Config::get('myanpay::api_password');
-		// $this->apiKey 		= Config::get('myanpay::api_key');
-		// $this->environment	= Config::get('myanpay::environment');
+
 	}
 
 	public function purchase($data)
@@ -58,7 +55,7 @@ class Myanpay extends Gateway {
 
     		$param = array_merge($param, $this->setItems($data[0]));
 
-			$curl = new Curl('https://www.myanpay-virtualbox.com/Personal/ExpressCheckout/ExpressCheckoutRequestHandler.aspx');
+			$curl = new Curl($this->checkoutUrl);
 
 			$curl->options = array(
 				CURLOPT_VERBOSE => 1,
@@ -72,7 +69,7 @@ class Myanpay extends Gateway {
 			$getResult = $curl->make();
 
 			parse_str($getResult, $result); // Convert query string to array
-			
+
 			if ($result['Ack'] == 'fail') {
 				throw new TokenNotFoundException; // need to fix
 			}
@@ -91,7 +88,7 @@ class Myanpay extends Gateway {
 				'TOKEN' => $session->get('token')
     		];
 
-    		$curl = new Curl('https://www.myanpay-virtualbox.com/Personal/ExpressCheckout/GetExpressCheckoutRequestHandler.aspx');
+    		$curl = new Curl($this->getCheckoutUrl);
 
 			$curl->options = array(
 				CURLOPT_VERBOSE => 1,
@@ -101,6 +98,7 @@ class Myanpay extends Gateway {
 				CURLOPT_POST => 1,
 				CURLOPT_POSTFIELDS => $param,
 			);
+
 			$getResult = $curl->make();
 			
 			parse_str($getResult, $result);
@@ -128,6 +126,22 @@ class Myanpay extends Gateway {
 		}
 
 		return $param;
+	}
+
+    public function completePurchase()
+    {
+        doCheckoutUrl
+    }
+
+	/**
+	 * Calculate total values
+	 *
+	 * @return void
+	 * @author 
+	 **/
+	public function calculateTotals($items)
+	{
+		
 	}
 
 	protected function redirectToLogin()

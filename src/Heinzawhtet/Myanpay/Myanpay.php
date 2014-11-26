@@ -1,8 +1,10 @@
 <?php namespace Heinzawhtet\Myanpay;
 
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RedirectResponse as Redirect;
 use Symfony\Component\HttpFoundation\Session\Session;
-use Heinzawhtet\Myanpay\Exceptions\TokenNotFoundException;
+use Heinzawhtet\Myanpay\Exceptions\AckFailException;
+use Heinzawhtet\Myanpay\Exceptions\EmptyResponseException;
 
 class Myanpay extends Gateway {
 
@@ -13,6 +15,10 @@ class Myanpay extends Gateway {
 	public $apiUsername;
 	public $apiPassword;
 	public $apiSignature;
+
+    public $headerImg;
+    public $brandName;
+    public $customerServiceNumber;
 
 	public $returnUrl;
 	public $cancelUrl;
@@ -28,85 +34,63 @@ class Myanpay extends Gateway {
 	protected $redirect;
 
 
-	public function __construct()
+	public function __construct(Request $request = null, Session $session = null)
 	{
-
+        $this->request = $request ?: Request::createFromGlobals();
+        $this->session = $session ?: new Session;
 	}
 
 	public function purchase($data)
 	{
-		$session = new Session;
-
-		if(!$session->has('token')) 
-		{
-			$param = [
-				"Method" => $this->method,
-				"version" => $this->version,
-				"apiusername" => $this->apiUsername,
-				"apipassword" => $this->apiPassword,
-				"apisignature" => $this->apiSignature,
-				"paymentaction" => $this->paymentAction,
-				"returnUrl" => $this->returnUrl,
-				"cancelUrl" => $this->cancelUrl,
-				"PaymentRequest_ItemTotalAmt" => '2000',
-				"paymentRequest_Amt" => '2000',
-				"paymentaction" => 'Sale'
-    		];
-
-    		$param = array_merge($param, $this->setItems($data[0]));
-
-			$curl = new Curl($this->checkoutUrl);
-
-			$curl->options = array(
-				CURLOPT_VERBOSE => 1,
-				CURLOPT_SSL_VERIFYPEER => 0,
-				CURLOPT_SSL_VERIFYHOST => 0,
-				CURLOPT_RETURNTRANSFER => 1,
-				CURLOPT_POST => 1,
-				CURLOPT_POSTFIELDS => $param,
-			);
-			
-			$getResult = $curl->make();
-
-			parse_str($getResult, $result); // Convert query string to array
-
-			if ($result['Ack'] == 'fail') {
-				throw new TokenNotFoundException; // need to fix
-			}
-
-			$session->set('token', $result['Token']);
-			
-			return Redirect::create($this->loginUrl . urldecode($result['Token']));
-		}
-
-			$param = [
-				"Method" => 'GetExpressCheckout',
-				"version" => $this->version,
-				"apiusername" => $this->apiUsername,
-				"apipassword" => $this->apiPassword,
-				"apisignature" => $this->apiSignature,
-				'TOKEN' => $session->get('token')
-    		];
-
-    		$curl = new Curl($this->getCheckoutUrl);
-
-			$curl->options = array(
-				CURLOPT_VERBOSE => 1,
-				CURLOPT_SSL_VERIFYPEER => 0,
-				CURLOPT_SSL_VERIFYHOST => 0,
-				CURLOPT_RETURNTRANSFER => 1,
-				CURLOPT_POST => 1,
-				CURLOPT_POSTFIELDS => $param,
-			);
-
-			$getResult = $curl->make();
-			
-			parse_str($getResult, $result);
-			dd($result);
-			
-			return Redirect::create('http://localhost');
-
+		return $this->authorize($data);
 	}
+
+    public function authorize($data)
+    {
+        $param = [
+            "Method" => $this->method,
+            "version" => $this->version,
+            "apiusername" => $this->apiUsername,
+            "apipassword" => $this->apiPassword,
+            "apisignature" => $this->apiSignature,
+            "paymentaction" => $this->paymentAction,
+            "returnUrl" => $this->returnUrl,
+            "cancelUrl" => $this->cancelUrl,
+            "PaymentRequest_ItemTotalAmt" => '2000',
+            "paymentRequest_Amt" => '2000',
+            "paymentaction" => 'Sale'
+        ];
+
+        $param = array_merge($param, $this->setItems($data[0]));
+
+        $curl = new Curl($this->checkoutUrl);
+
+        $curl->options = array(
+            CURLOPT_VERBOSE => 1,
+            CURLOPT_SSL_VERIFYPEER => 0,
+            CURLOPT_SSL_VERIFYHOST => 0,
+            CURLOPT_RETURNTRANSFER => 1,
+            CURLOPT_POST => 1,
+            CURLOPT_POSTFIELDS => $param,
+        );
+        
+        $getResult = $curl->make();
+
+        parse_str($getResult, $result); // Convert query string to array
+
+        if (empty($result)) {
+            throw new EmptyResponseException('No Response returned'); // need to fix
+        }
+
+        if ($result['Ack'] == 'fail') {
+            throw new AckFailException($result['SHORTMESSAGE0']); // need to fix
+        }
+
+        $this->session->set('token', $result['Token']);
+        $this->session->set('paymentAmmount', $param['paymentRequest_Amt']);
+
+        return Redirect::create($this->loginUrl . urldecode($result['Token']));
+    }
 
 
 	/**
@@ -128,21 +112,71 @@ class Myanpay extends Gateway {
 		return $param;
 	}
 
-    public function completePurchase()
+    public function setParams($data)
     {
-        doCheckoutUrl
+
     }
 
-	/**
-	 * Calculate total values
-	 *
-	 * @return void
-	 * @author 
-	 **/
-	public function calculateTotals($items)
-	{
-		
-	}
+    public function fetchDetail()
+    {
+        $param = [
+            "Method" => 'GetExpressCheckout',
+            "version" => $this->version,
+            "apiusername" => $this->apiUsername,
+            "apipassword" => $this->apiPassword,
+            "apisignature" => $this->apiSignature,
+            'TOKEN' => $this->session->get('token')
+        ];
+
+        $curl = new Curl($this->getCheckoutUrl);
+
+        $curl->options = array(
+            CURLOPT_VERBOSE => 1,
+            CURLOPT_SSL_VERIFYPEER => 0,
+            CURLOPT_SSL_VERIFYHOST => 0,
+            CURLOPT_RETURNTRANSFER => 1,
+            CURLOPT_POST => 1,
+            CURLOPT_POSTFIELDS => $param,
+        );
+
+        $getResult = $curl->make();
+        
+        parse_str($getResult, $result);
+        
+        return $result;
+    }
+
+    public function completePurchase()
+    {
+        $param = [
+            "Method" => 'DoExpressCheckout',
+            "version" => $this->version,
+            "apiusername" => $this->apiUsername,
+            "apipassword" => $this->apiPassword,
+            "apisignature" => $this->apiSignature,
+            "paymentaction" => 'Sale',
+            'TOKEN' => $this->session->get('token'),
+            'PayerId' => $this->request->query->get('payerId'),
+            'PaymentRequest_Amt' => $this->session->get('paymentAmmount'),
+        ];
+
+        $curl = new Curl($this->doCheckoutUrl);
+
+        $curl->options = array(
+            CURLOPT_VERBOSE => 1,
+            CURLOPT_SSL_VERIFYPEER => 0,
+            CURLOPT_SSL_VERIFYHOST => 0,
+            CURLOPT_RETURNTRANSFER => 1,
+            CURLOPT_POST => 1,
+            CURLOPT_POSTFIELDS => $param,
+        );
+
+        $getResult = $curl->make();
+
+        parse_str($getResult, $result);
+
+        return $result;
+    }
 
 	protected function redirectToLogin()
 	{
@@ -463,49 +497,73 @@ class Myanpay extends Gateway {
     }
 
     /**
-     * Gets the value of session.
+     * Gets the value of headerImg.
      *
      * @return mixed
      */
-    public function getSession()
+    public function getHeaderImg()
     {
-        return $this->session;
+        return $this->headerImg;
     }
 
     /**
-     * Sets the value of session.
+     * Sets the value of headerImg.
      *
-     * @param mixed $session the session
+     * @param mixed $headerImg the header img
      *
      * @return self
      */
-    protected function setSession($session)
+    public function setHeaderImg($headerImg)
     {
-        $this->session = $session;
+        $this->headerImg = $headerImg;
 
         return $this;
     }
 
     /**
-     * Gets the value of redirect.
+     * Gets the value of brandName.
      *
      * @return mixed
      */
-    public function getRedirect()
+    public function getBrandName()
     {
-        return $this->redirect;
+        return $this->brandName;
     }
 
     /**
-     * Sets the value of redirect.
+     * Sets the value of brandName.
      *
-     * @param mixed $redirect the redirect
+     * @param mixed $brandName the brand name
      *
      * @return self
      */
-    protected function setRedirect($redirect)
+    public function setBrandName($brandName)
     {
-        $this->redirect = $redirect;
+        $this->brandName = $brandName;
+
+        return $this;
+    }
+
+    /**
+     * Gets the value of customerServiceNumber.
+     *
+     * @return mixed
+     */
+    public function getCustomerServiceNumber()
+    {
+        return $this->customerServiceNumber;
+    }
+
+    /**
+     * Sets the value of customerServiceNumber.
+     *
+     * @param mixed $customerServiceNumber the customer service number
+     *
+     * @return self
+     */
+    public function setCustomerServiceNumber($customerServiceNumber)
+    {
+        $this->customerServiceNumber = $customerServiceNumber;
 
         return $this;
     }

@@ -8,42 +8,42 @@ use Heinzawhtet\Myanpay\Exceptions\EmptyResponseException;
 
 class Myanpay extends Gateway {
 
-	public $method = 'SetExpressCheckout';
-	public $version = '1.1';
-	public $paymentAction = 'Sale';
+    public $method = 'SetExpressCheckout';
+    public $version = '1.1';
+    public $paymentAction = 'Sale';
 
-	public $apiUsername;
-	public $apiPassword;
-	public $apiSignature;
+    public $apiUsername;
+    public $apiPassword;
+    public $apiSignature;
 
     public $headerImg;
     public $brandName;
     public $customerServiceNumber;
 
-	public $returnUrl;
-	public $cancelUrl;
+    public $returnUrl;
+    public $cancelUrl;
 
-	protected $env;
+    protected $env;
 
-	protected $checkoutUrl = "https://www.myanpay-virtualbox.com/Personal/ExpressCheckout/ExpressCheckoutRequestHandler.aspx";
-	protected $getCheckoutUrl = "https://www.myanpay-virtualbox.com/Personal/ExpressCheckout/GetExpressCheckoutRequestHandler.aspx";
-	protected $doCheckoutUrl = "https://www.myanpay-virtualbox.com/Personal/ExpressCheckout/DoExpressCheckOutRequestHandler.aspx";
-	protected $loginUrl = "https://www.myanpay-virtualbox.com/Personal/ExpressCheckout/ExpressCheckoutLogin.aspx?cmd=express-checkout&token=";
+    protected $checkoutUrl = "https://www.myanpay-virtualbox.com/Personal/ExpressCheckout/ExpressCheckoutRequestHandler.aspx";
+    protected $getCheckoutUrl = "https://www.myanpay-virtualbox.com/Personal/ExpressCheckout/GetExpressCheckoutRequestHandler.aspx";
+    protected $doCheckoutUrl = "https://www.myanpay-virtualbox.com/Personal/ExpressCheckout/DoExpressCheckOutRequestHandler.aspx";
+    protected $loginUrl = "https://www.myanpay-virtualbox.com/Personal/ExpressCheckout/ExpressCheckoutLogin.aspx?cmd=express-checkout&token=";
 
-	protected $session;
-	protected $redirect;
+    protected $session;
+    protected $redirect;
 
 
-	public function __construct(Request $request = null, Session $session = null)
-	{
+    public function __construct(Request $request = null, Session $session = null)
+    {
         $this->request = $request ?: Request::createFromGlobals();
         $this->session = $session ?: new Session;
-	}
+    }
 
-	public function purchase($data)
-	{
-		return $this->authorize($data);
-	}
+    public function purchase($data)
+    {
+        return $this->authorize($data);
+    }
 
     public function authorize($data)
     {
@@ -56,12 +56,12 @@ class Myanpay extends Gateway {
             "paymentaction" => $this->paymentAction,
             "returnUrl" => $this->returnUrl,
             "cancelUrl" => $this->cancelUrl,
-            "PaymentRequest_ItemTotalAmt" => '2000',
-            "paymentRequest_Amt" => '2000',
+            "PaymentRequest_ItemTotalAmt" => $data['amount'],
+            "paymentRequest_Amt" => $data['amount'],
             "paymentaction" => 'Sale'
         ];
 
-        $param = array_merge($param, $this->setItems($data[0]));
+        $param = array_merge($param, $this->setItems($data['items']));
 
         $curl = new Curl($this->checkoutUrl);
 
@@ -73,6 +73,11 @@ class Myanpay extends Gateway {
             CURLOPT_POST => 1,
             CURLOPT_POSTFIELDS => $param,
         );
+
+        if($errno = curl_errno($curl)) {
+            $message = curl_strerror($errno);
+            throw new CurlErrorException("CURL error : $message");
+        }
         
         $getResult = $curl->make();
 
@@ -83,7 +88,7 @@ class Myanpay extends Gateway {
         }
 
         if ($result['Ack'] == 'fail') {
-            throw new AckFailException($result['SHORTMESSAGE0']); // need to fix
+            throw new AckFailException($result['LONGMESSAGE0']); // need to fix
         }
 
         $this->session->set('token', $result['Token']);
@@ -93,24 +98,24 @@ class Myanpay extends Gateway {
     }
 
 
-	/**
-	 * Set items into MyanPay format
-	 *
-	 * @return void
-	 * @author 
-	 **/
-	public function setItems($items)
-	{
-		foreach ($items as $key => $item) {
-			$param['paymentRequest_ItemNumber'.$key] = $item['number'];
-			$param['paymentRequest_ItemName'.$key] = $item['name'];
-			$param['paymentRequest_ItemAmt'.$key] = $item['ammount'];
-			$param['paymentRequest_ItemQty'.$key] = $item['quantity'];
-			$param['paymentRequest_ItemDesc'.$key] = $item['desc'];
-		}
+    /**
+     * Set items into MyanPay format
+     *
+     * @return void
+     * @author 
+     **/
+    public function setItems($items)
+    {
+        foreach ($items as $key => $item) {
+            $param['paymentRequest_ItemNumber'.$key] = $item['number'];
+            $param['paymentRequest_ItemName'.$key] = $item['name'];
+            $param['paymentRequest_ItemAmt'.$key] = $item['ammount'];
+            $param['paymentRequest_ItemQty'.$key] = $item['quantity'];
+            $param['paymentRequest_ItemDesc'.$key] = $item['desc'];
+        }
 
-		return $param;
-	}
+        return $param;
+    }
 
     public function setParams($data)
     {
@@ -175,13 +180,18 @@ class Myanpay extends Gateway {
 
         parse_str($getResult, $result);
 
+
+        if($result['Ack'] == 'fail') {
+            throw new AckFailException($result['LONGMESSAGE0']);
+        }
+
         return $result;
     }
 
-	protected function redirectToLogin()
-	{
-		return new Redirect;
-	}
+    protected function redirectToLogin()
+    {
+        return new Redirect;
+    }
 
 
     /**

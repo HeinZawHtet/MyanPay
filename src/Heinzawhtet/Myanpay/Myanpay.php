@@ -1,4 +1,15 @@
-<?php namespace Heinzawhtet\Myanpay;
+<?php 
+
+/**
+ * A PHP Package for Payment with MyanPay
+ *
+ * @author Hein Zaw Htet <heinzawhtet.com>
+ * @see http://www.heinzawhtet.com/myanpay
+ * @license http://www.opensource.org/licenses/mit-license.html MIT License
+ * @copyright 2014 Hein Zaw Htet
+ */
+
+namespace Heinzawhtet\Myanpay;
 
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RedirectResponse as Redirect;
@@ -6,57 +17,174 @@ use Symfony\Component\HttpFoundation\Session\Session;
 use Heinzawhtet\Myanpay\Exceptions\AckFailException;
 use Heinzawhtet\Myanpay\Exceptions\EmptyResponseException;
 
-class Myanpay extends Gateway {
+class Myanpay {
 
-    public $method = 'SetExpressCheckout';
-    public $version = '1.1';
-    public $paymentAction = 'Sale';
+    const API_VERSION = '1.1';
 
+    /**
+     * Payment Action
+     *
+     * @var String
+     * @access private
+     */
+    private $paymentAction = 'Sale';
+
+    /**
+     * API Username
+     *
+     * @var String
+     * @access public
+     */
     public $apiUsername;
+
+    /**
+     * API Password
+     *
+     * @var String
+     * @access public
+     */
     public $apiPassword;
+
+    /**
+     * API Signature
+     *
+     * @var String
+     * @access public
+     */
     public $apiSignature;
 
+    /**
+     * Header Image Url of Seller
+     *
+     * @var String
+     * @access public
+     */
     public $headerImg;
+
+    /**
+     * Brand Name of Seller
+     *
+     * @var String
+     * @access public
+     */
     public $brandName;
+
+    /**
+     * Customer Service Number of Seller
+     *
+     * @var Int
+     * @access public
+     */
     public $customerServiceNumber;
 
+    /**
+     * Url to return when payment was successful
+     *
+     * @var String
+     * @access public
+     */
     public $returnUrl;
+
+    /**
+     * Url to return when payment was cancel :'(
+     *
+     * @var String
+     * @access public
+     */
     public $cancelUrl;
 
-    protected $env;
+    /**
+     * Get shipping info from MyanPay
+     *
+     * @var Boolean
+     * @access public
+     */
+    public $noShipping = false;
 
-    protected $checkoutUrl = "https://www.myanpay-virtualbox.com/Personal/ExpressCheckout/ExpressCheckoutRequestHandler.aspx";
-    protected $getCheckoutUrl = "https://www.myanpay-virtualbox.com/Personal/ExpressCheckout/GetExpressCheckoutRequestHandler.aspx";
-    protected $doCheckoutUrl = "https://www.myanpay-virtualbox.com/Personal/ExpressCheckout/DoExpressCheckOutRequestHandler.aspx";
-    protected $loginUrl = "https://www.myanpay-virtualbox.com/Personal/ExpressCheckout/ExpressCheckoutLogin.aspx?cmd=express-checkout&token=";
+    /**
+     * Check environment
+     *
+     * @var Boolean
+     * @access public
+     */
+    public $dev;
 
+    /**
+     * Session object
+     *
+     * @var Object
+     * @access protected
+     */
     protected $session;
+
+    /**
+     * Redirect Object
+     *
+     * @var Object
+     * @access protected
+     */
     protected $redirect;
 
 
-    public function __construct(Request $request = null, Session $session = null)
+    public function __construct(Session $session = null)
     {
-        $this->request = $request ?: Request::createFromGlobals();
         $this->session = $session ?: new Session;
     }
 
+    /**
+     * Send data & request nesccessry credential from endpoint such as Token
+     *
+     * @param array $data
+     *
+     * @return \Heinzawhtet\Myanpay\Requests\SetExpressCheckoutRequest
+     */
     public function purchase($data)
     {
         return $this->authorize($data);
     }
 
+
+    /**
+     * Get authorization from server
+     *
+     * @param array $data
+     *
+     * @return Redirect
+     */
     public function authorize($data)
     {
-        $request = Heinzawhtet\Request\SetExpressCheckoutRequest;
-        return $request->initialize($data);
+        $request = new \Heinzawhtet\Myanpay\Requests\SetExpressCheckoutRequest;
+        return $request->initialize($this, $data);
     }
 
+    /**
+     * Completing a payment
+     *
+     * @return array
+     */
+    public function completePurchase()
+    {
+        $request = new \Heinzawhtet\Myanpay\Requests\GetExpressCheckoutRequest;
+        return $request->initialize($this);
+    }
+
+    /**
+     * Fetch payment informations
+     *
+     * @return array
+     */
+    public function fetchDetail()
+    {
+        $request = new \Heinzawhtet\Myanpay\Requests\DoExpressCheckoutRequest;
+        return $request->initialize($this);
+    }
 
     /**
      * Set items into MyanPay format
      *
-     * @return void
-     * @author 
+     * @param array $items
+     *
+     * @return array
      **/
     public function setItems($items)
     {
@@ -67,137 +195,11 @@ class Myanpay extends Gateway {
             $param['paymentRequest_ItemQty'.$key] = $item['quantity'];
             $param['paymentRequest_ItemDesc'.$key] = $item['desc'];
         }
-
         return $param;
     }
 
-    public function setParams($data)
-    {
-
-    }
-
-    public function fetchDetail()
-    {
-        $param = [
-            "Method" => 'GetExpressCheckout',
-            "version" => $this->version,
-            "apiusername" => $this->apiUsername,
-            "apipassword" => $this->apiPassword,
-            "apisignature" => $this->apiSignature,
-            'TOKEN' => $this->session->get('token')
-        ];
-
-        $curl = new Curl($this->getCheckoutUrl);
-
-        $curl->options = array(
-            CURLOPT_VERBOSE => 1,
-            CURLOPT_SSL_VERIFYPEER => 0,
-            CURLOPT_SSL_VERIFYHOST => 0,
-            CURLOPT_RETURNTRANSFER => 1,
-            CURLOPT_POST => 1,
-            CURLOPT_POSTFIELDS => $param,
-        );
-
-        $getResult = $curl->make();
-        
-        parse_str($getResult, $result);
-        
-        return $result;
-    }
-
-    public function completePurchase()
-    {
-        $param = [
-            "Method" => 'DoExpressCheckout',
-            "version" => $this->version,
-            "apiusername" => $this->apiUsername,
-            "apipassword" => $this->apiPassword,
-            "apisignature" => $this->apiSignature,
-            "paymentaction" => 'Sale',
-            'TOKEN' => $this->session->get('token'),
-            'PayerId' => $this->request->query->get('payerId'),
-            'PaymentRequest_Amt' => $this->session->get('paymentAmmount'),
-        ];
-
-        $curl = new Curl($this->doCheckoutUrl);
-
-        $curl->options = array(
-            CURLOPT_VERBOSE => 1,
-            CURLOPT_SSL_VERIFYPEER => 0,
-            CURLOPT_SSL_VERIFYHOST => 0,
-            CURLOPT_RETURNTRANSFER => 1,
-            CURLOPT_POST => 1,
-            CURLOPT_POSTFIELDS => $param,
-        );
-
-        $getResult = $curl->make();
-
-        parse_str($getResult, $result);
-
-
-        if($result['Ack'] == 'fail') {
-            throw new AckFailException($result['LONGMESSAGE0']);
-        }
-
-        return $result;
-    }
-
-    protected function redirectToLogin()
-    {
-        return new Redirect;
-    }
-
-
     /**
-     * Gets the value of method.
-     *
-     * @return mixed
-     */
-    public function getMethod()
-    {
-        return $this->method;
-    }
-
-    /**
-     * Sets the value of method.
-     *
-     * @param mixed $method the method
-     *
-     * @return self
-     */
-    public function setMethod($method)
-    {
-        $this->method = $method;
-
-        return $this;
-    }
-
-    /**
-     * Gets the value of version.
-     *
-     * @return mixed
-     */
-    public function getVersion()
-    {
-        return $this->version;
-    }
-
-    /**
-     * Sets the value of version.
-     *
-     * @param mixed $version the version
-     *
-     * @return self
-     */
-    public function setVersion($version)
-    {
-        $this->version = $version;
-
-        return $this;
-    }
-
-    /**
-     * Gets the value of paymentAction.
+     * Gets the value of payment action.
      *
      * @return mixed
      */
@@ -207,13 +209,13 @@ class Myanpay extends Gateway {
     }
 
     /**
-     * Sets the value of paymentAction.
+     * Sets the value of version.
      *
-     * @param mixed $paymentAction the payment action
+     * @param mixed $version the version
      *
      * @return self
      */
-    public function setPaymentAction($paymentAction)
+    public function setVersion($paymentAction)
     {
         $this->paymentAction = $paymentAction;
 
@@ -341,13 +343,37 @@ class Myanpay extends Gateway {
     }
 
     /**
+     * Gets the value of noShipping.
+     *
+     * @return mixed
+     */
+    public function getNoShipping()
+    {
+        return $this->noShipping;
+    }
+
+    /**
+     * Sets the value of noShipping.
+     *
+     * @param mixed $noShipping the cancel url
+     *
+     * @return self
+     */
+    public function setNoShipping($noShipping)
+    {
+        $this->noShipping = $noShipping;
+
+        return $this;
+    }
+
+    /**
      * Gets the value of env.
      *
      * @return mixed
      */
-    public function getEnv()
+    public function getDev()
     {
-        return $this->env;
+        return $this->dev;
     }
 
     /**
@@ -357,105 +383,9 @@ class Myanpay extends Gateway {
      *
      * @return self
      */
-    protected function setEnv($env)
+    public function setDev($dev)
     {
-        $this->env = $env;
-
-        return $this;
-    }
-
-    /**
-     * Gets the value of checkoutUrl.
-     *
-     * @return mixed
-     */
-    public function getCheckoutUrl()
-    {
-        return $this->checkoutUrl;
-    }
-
-    /**
-     * Sets the value of checkoutUrl.
-     *
-     * @param mixed $checkoutUrl the checkout url
-     *
-     * @return self
-     */
-    protected function setCheckoutUrl($checkoutUrl)
-    {
-        $this->checkoutUrl = $checkoutUrl;
-
-        return $this;
-    }
-
-    /**
-     * Gets the value of getCheckoutUrl.
-     *
-     * @return mixed
-     */
-    public function getGetCheckoutUrl()
-    {
-        return $this->getCheckoutUrl;
-    }
-
-    /**
-     * Sets the value of getCheckoutUrl.
-     *
-     * @param mixed $getCheckoutUrl the get checkout url
-     *
-     * @return self
-     */
-    protected function setGetCheckoutUrl($getCheckoutUrl)
-    {
-        $this->getCheckoutUrl = $getCheckoutUrl;
-
-        return $this;
-    }
-
-    /**
-     * Gets the value of doCheckoutUrl.
-     *
-     * @return mixed
-     */
-    public function getDoCheckoutUrl()
-    {
-        return $this->doCheckoutUrl;
-    }
-
-    /**
-     * Sets the value of doCheckoutUrl.
-     *
-     * @param mixed $doCheckoutUrl the do checkout url
-     *
-     * @return self
-     */
-    protected function setDoCheckoutUrl($doCheckoutUrl)
-    {
-        $this->doCheckoutUrl = $doCheckoutUrl;
-
-        return $this;
-    }
-
-    /**
-     * Gets the value of loginUrl.
-     *
-     * @return mixed
-     */
-    public function getLoginUrl()
-    {
-        return $this->loginUrl;
-    }
-
-    /**
-     * Sets the value of loginUrl.
-     *
-     * @param mixed $loginUrl the login url
-     *
-     * @return self
-     */
-    protected function setLoginUrl($loginUrl)
-    {
-        $this->loginUrl = $loginUrl;
+        $this->dev = $dev;
 
         return $this;
     }

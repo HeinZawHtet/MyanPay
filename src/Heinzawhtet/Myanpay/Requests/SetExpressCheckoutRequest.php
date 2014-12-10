@@ -68,7 +68,7 @@ class SetExpressCheckoutRequest extends AbstractRequest {
             "apiusername" => $obj->getApiUsername(),
             "apipassword" => $obj->getApiPassword(),
             "apisignature" => $obj->getApiSignature(),
-            "paymentaction" => $obj->getPaymentAction(),
+            "paymentaction" => 'Sale',
             "returnUrl" => $obj->getReturnUrl(),
             "cancelUrl" => $obj->getCancelUrl(),
             "noShipping" => $obj->getNoShipping(),

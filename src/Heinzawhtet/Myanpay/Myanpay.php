@@ -153,8 +153,7 @@ class Myanpay {
      */
     public function authorize($data)
     {
-        $request = new \Heinzawhtet\Myanpay\Requests\SetExpressCheckoutRequest;
-        return $request->initialize($this, $data);
+        return $this->createRequest('\Heinzawhtet\Myanpay\Requests\SetExpressCheckoutRequest', $data);
     }
 
     /**
@@ -164,8 +163,7 @@ class Myanpay {
      */
     public function completePurchase()
     {
-        $request = new \Heinzawhtet\Myanpay\Requests\GetExpressCheckoutRequest;
-        return $request->initialize($this);
+        return $this->createRequest('\Heinzawhtet\Myanpay\Requests\GetExpressCheckoutRequest');
     }
 
     /**
@@ -175,8 +173,24 @@ class Myanpay {
      */
     public function fetchDetail()
     {
-        $request = new \Heinzawhtet\Myanpay\Requests\DoExpressCheckoutRequest;
-        return $request->initialize($this);
+        return $this->createRequest('\Heinzawhtet\Myanpay\Requests\DoExpressCheckoutRequest');
+    }
+
+    /** 
+    * Create a instance and load method
+    *
+    * @param Object $class
+    * @param Array $data
+    *
+    * @return array
+    */
+    public function createRequest($class, $data = null)
+    {
+        $obj = new $class;
+        if (isset($data)) {
+            return $obj->initialize($this, $data);
+        }
+        return $obj->initialize($this);
     }
 
     /**

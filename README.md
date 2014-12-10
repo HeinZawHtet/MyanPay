@@ -46,9 +46,9 @@ First set your MyanPay API credentials and request to server.
 
 	$pay = new Heinzawhtet\Myanpay\Myanpay;
 
-	$pay->setApiUsername('_junio7482443442_myanpayAPI');
-	$pay->setApiPassword('Z687FL3W036I06D0');
-	$pay->setApiSignature('b98qL7734zo0Fw50mFP4u55p583bkLz44ZY524EMe5rO7hfdzlWq5AN2rx8d');
+	$pay->setApiUsername('API_USERNAME');
+	$pay->setApiPassword('API_PASSWORD');
+	$pay->setApiSignature('API_SIGNATURE');
 	$pay->setDev(true); // if you are on development
 
 	$pay->setHeaderImg('YOUR_BRAND_IMG_PATH');
